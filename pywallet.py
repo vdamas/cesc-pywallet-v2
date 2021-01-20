@@ -4755,11 +4755,11 @@ if __name__ == '__main__':
 		help="KEY is in hexadecimal format")
 
 	parser.add_option("--datadir", dest="datadir",
-		help="wallet directory (defaults to bitcoin default)")
+		help="REMOVED OPTION: put full path in the --wallet option")
 
 	parser.add_option("--wallet", dest="walletfile",
 		help="wallet filename (defaults to wallet.dat)",
-		default="wallet.dat")
+		default="")
 
 	parser.add_option("--label", dest="label",
 		help="label shown in the adress book (defaults to '')",
@@ -4950,10 +4950,18 @@ if __name__ == '__main__':
 		max_version = 10 ** 9
 
 	if options.datadir is not None:
-		wallet_dir = options.datadir
+		print("Breaking change")
+		print("  The --datadir option has been removed, now the full path of the wallet file must go to --wallet")
+		print("  If you're not sure what to do, concatenating the old --datadir content, then a directory separator, then the old --wallet should do the trick")
+		print("  If not, ask for help in the Pywallet thread: https://bitcointalk.org/index.php?topic=34028")
+		exit()
 
-	if options.walletfile is not None:
-		wallet_name = options.walletfile
+	db_dir = ""
+	if options.walletfile:
+		if not os.path.isfile(options.walletfile):
+			print("ERROR: wallet file %s can't be found"%repr(os.path.realpath(options.walletfile)))
+			exit()
+		db_dir, wallet_name = os.path.split(os.path.realpath(options.walletfile))
 
 	if 'twisted' not in missing_dep and options.web is not None:
 		md5_pywallet = md5_file(pyw_path+"/"+pyw_filename)
@@ -4982,26 +4990,23 @@ if __name__ == '__main__':
 		exit(0)
 
 	if options.namecoin or options.otherversion is not None:
-		if options.datadir is None and options.keyinfo is None:
-			print("You must provide your wallet directory")
-			exit(0)
+		if options.namecoin:
+			addrtype = 52
 		else:
-			if options.namecoin:
-				addrtype = 52
-			else:
-				addrtype = int(options.otherversion)
+			addrtype = int(options.otherversion)
 
 	if options.keyinfo is not None:
 		if not keyinfo(options.key, options.keyishex):
 			print("Bad private key")
 		exit(0)
 
-	db_dir = determine_db_dir()
-
 	if options.testnet:
 		db_dir += "/testnet3"
 		addrtype = 111
 
+	if not db_dir:
+		print("A wallet path (--wallet) is necessary for this option")
+		exit()
 	db_env = create_env(db_dir)
 
 	if options.multidelete is not None:
@@ -5012,7 +5017,7 @@ if __name__ == '__main__':
 		typedel=content[0]
 		kd=filter(bool,content[1:])
 		try:
-			r=delete_from_wallet(db_env, determine_db_name(), typedel, kd)
+			r=delete_from_wallet(db_env, wallet_name, typedel, kd)
 			print('%d element%s deleted'%(r, 's'*(int(r>1))))
 		except:
 			print("Error: do not try to delete a non-existing transaction.")
@@ -5020,7 +5025,7 @@ if __name__ == '__main__':
 		exit(0)
 
 
-	read_wallet(json_db, db_env, determine_db_name(), True, True, "", options.dumpbalance is not None)
+	read_wallet(json_db, db_env, wallet_name, True, True, "", options.dumpbalance is not None)
 
 	if json_db.get('minversion') > max_version:
 		print("Version mismatch (must be <= %d)" % max_version)
@@ -5034,7 +5039,7 @@ if __name__ == '__main__':
 		elif (options.keyishex is None and options.key in private_keys) or (options.keyishex is not None and options.key in private_hex_keys):
 			print("Already exists")
 		else:
-			db = open_wallet(db_env, determine_db_name(), writable=True)
+			db = open_wallet(db_env, wallet_name, writable=True)
 
 			if importprivkey(db, options.key, options.label, options.reserve, options.keyishex):
 				print("Imported successfully")

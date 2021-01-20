@@ -2617,21 +2617,39 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 	return {'crypted':crypted}
 
 
-
-def importprivkey(db, sec, label, reserve, keyishex, verbose=True, addrv=addrtype):
+def parse_private_key(sec, keyishex, force_compressed=None):
+	as_compressed = lambda x:x if force_compressed is None else force_compressed
 	if keyishex is None:
 		pkey = regenerate_key(sec)
-		compressed = is_compressed(sec)
+		compressed = as_compressed(is_compressed(sec))
 	elif len(sec) == 64:
 		pkey = EC_KEY(str_to_long(sec.decode('hex')))
-		compressed = False
+		compressed = as_compressed(False)
 	elif len(sec) == 66:
 		pkey = EC_KEY(str_to_long(sec[:-2].decode('hex')))
-		compressed = True
+		compressed = as_compressed(True)
 	else:
 		print("Hexadecimal private keys must be 64 or 66 characters long (specified one is "+str(len(sec))+" characters long)")
-		return False
+		if len(sec)<64:
+			compressed = as_compressed(False)
+			print("Padding with zeroes, %scompressed"%('un' if not compressed else ''))
+			try:
+				pkey = EC_KEY(str_to_long(('0'*(64-len(sec)) + sec).decode('hex')))
+			except Exception as e:
+				print(e)
+				print("Failed padding with zeroes")
+				exit()
+		elif len(sec)>66:
+			compressed = as_compressed(False)
+			print("Keeping first 64 characters, %scompressed"%('un' if not compressed else ''))
+			pkey = EC_KEY(str_to_long(sec[:64].decode('hex')))
+		else:
+			print("Error")
+			exit()
+	return (pkey, compressed)
 
+def keyinfo(sec, keyishex, addrv=addrtype, print_info=False, force_compressed=None):
+	(pkey, compressed) = parse_private_key(sec, keyishex, force_compressed)
 	if not pkey:
 		return False
 
@@ -2640,10 +2658,13 @@ def importprivkey(db, sec, label, reserve, keyishex, verbose=True, addrv=addrtyp
 	public_key = GetPubKey(pkey, compressed)
 	addr = public_key_to_bc_address(public_key, addrv)
 
-	if verbose:
+	if print_info:
+		print("Compressed: %s"%str(compressed))
 		print("Address (%s): %s"%(aversions[addrv], addr))
 		print("Privkey (%s): %s"%(aversions[addrv], SecretToASecret(secret, compressed)))
 		print("Hexprivkey: %s"%(secret.encode('hex')))
+		if compressed:
+			print("    For compressed keys, the hexadecimal private key sometimes contains an extra '01' at the end")
 		print("Hash160: %s"%(bc_address_to_hash_160(addr).encode('hex')))
 		if not compressed:
 			print("Pubkey: 04%.64x%.64x"%(pkey.pubkey.point.x(), pkey.pubkey.point.y()))
@@ -2652,7 +2673,10 @@ def importprivkey(db, sec, label, reserve, keyishex, verbose=True, addrv=addrtyp
 		if int(secret.encode('hex'), 16)>_r:
 			print('Beware, 0x%s is equivalent to 0x%.33x</b>'%(secret.encode('hex'), int(secret.encode('hex'), 16)-_r))
 
+	return (secret, private_key, public_key, addr)
 
+def importprivkey(db, sec, label, reserve, keyishex, verbose=True, addrv=addrtype):
+	(secret, private_key, public_key, addr) = keyinfo(sec, keyishex, addrv, verbose)
 
 	global crypter, passphrase, json_db
 	crypted = False
@@ -2698,35 +2722,6 @@ def write_jsonfile(filename, array):
 	filout = open(filename, 'w')
 	filout.write(json.dumps(array, sort_keys=True, indent=0))
 	filout.close()
-
-def keyinfo(sec, keyishex):
-	if keyishex is None:
-		pkey = regenerate_key(sec)
-		compressed = is_compressed(sec)
-	elif len(sec) == 64:
-		pkey = EC_KEY(str_to_long(sec.decode('hex')))
-		compressed = False
-	elif len(sec) == 66:
-		pkey = EC_KEY(str_to_long(sec[:-2].decode('hex')))
-		compressed = True
-	else:
-		print("Hexadecimal private keys must be 64 or 66 characters long (specified one is "+str(len(sec))+" characters long)")
-		exit(0)
-
-	if not pkey:
-		return False
-
-	secret = GetSecret(pkey)
-	private_key = GetPrivKey(pkey, compressed)
-	public_key = GetPubKey(pkey, compressed)
-	addr = public_key_to_bc_address(public_key)
-
-	print("Address (%s): %s" % ( aversions[addrtype], addr ))
-	print("Privkey (%s): %s" % ( aversions[addrtype], SecretToASecret(secret, compressed) ))
-	print("Hexprivkey:   %s" % secret.encode('hex'))
-	print("Hash160:      %s"%(bc_address_to_hash_160(addr).encode('hex')))
-
-	return True
 
 def css_wui():
 	return """html, body {
@@ -4996,8 +4991,9 @@ if __name__ == '__main__':
 			addrtype = int(options.otherversion)
 
 	if options.keyinfo is not None:
-		if not keyinfo(options.key, options.keyishex):
-			print("Bad private key")
+		keyinfo(options.key, options.keyishex, addrtype, True, False)
+		print("")
+		keyinfo(options.key, options.keyishex, addrtype, True, True)
 		exit(0)
 
 	if options.testnet:

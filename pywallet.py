@@ -575,7 +575,7 @@ class AESModeOfOperation(object):
 				if  end > len(stringIn):
 					end = len(stringIn)
 				plaintext = self.convertString(stringIn, start, end, mode)
-				# print 'PT@%s:%s' % (j, plaintext)
+				# print('PT@%s:%s' % (j, plaintext))
 				if mode == self.modeOfOperation["CFB"]:
 					if firstRound:
 						output = self.aes.encrypt(IV, key, size)
@@ -618,7 +618,7 @@ class AESModeOfOperation(object):
 							iput[i] =  plaintext[i] ^ IV[i]
 						else:
 							iput[i] =  plaintext[i] ^ ciphertext[i]
-					# print 'IP@%s:%s' % (j, iput)
+					# print('IP@%s:%s' % (j, iput))
 					firstRound = False
 					ciphertext = self.aes.encrypt(iput, key, size)
 					# always 16 bytes because of the padding for CBC
@@ -833,13 +833,13 @@ class Crypter_pure(object):
 
 if crypter == 'pycrypto':
 	crypter = Crypter_pycrypto()
-#	print "Crypter: pycrypto"
+#	print("Crypter: pycrypto")
 elif crypter == 'ssl':
 	crypter = Crypter_ssl()
-#	print "Crypter: ssl"
+#	print("Crypter: ssl")
 else:
 	crypter = Crypter_pure()
-#	print "Crypter: pure"
+#	print("Crypter: pure")
 	logging.warning("pycrypto or libssl not found, decryption may be slow")
 
 ##########################################
@@ -851,7 +851,7 @@ else:
 try:
 	_p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2FL
 except:
-	print "Python 3 is not supported, you need Python 2.7.x"
+	print("Python 3 is not supported, you need Python 2.7.x")
 	exit(1)
 _r = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141L
 _b = 0x0000000000000000000000000000000000000000000000000000000000000007L
@@ -1238,7 +1238,7 @@ def ASecretToSecret(sec):
 	if not vch:
 		return False
 	if vch[0] != chr((addrtype+128)&255):
-		print 'Warning: adress prefix seems bad (%d vs %d)'%(ord(vch[0]), (addrtype+128)&255)
+		print('Warning: adress prefix seems bad (%d vs %d)'%(ord(vch[0]), (addrtype+128)&255))
 	return vch[1:]
 
 def regenerate_key(sec):
@@ -1320,8 +1320,8 @@ def search_patterns_on_disk(device, size, inc, patternlist):   # inc must be hig
 	try:
 		fd = os.open(device, otype)
 	except Exception as e:
-		print "Can't open %s, check the path or try as root"%device
-		print "  Error:", e.args
+		print("Can't open %s, check the path or try as root"%device)
+		print("  Error: "+str(e.args))
 		exit(0)
 
 	i = 0
@@ -1335,7 +1335,7 @@ def search_patterns_on_disk(device, size, inc, patternlist):   # inc must be hig
 	writeProgressEvery=100*Mo
 	while i < int(size) and (lendataloaded!=0 or lendataloaded==None):
 		if int(i/writeProgressEvery)!=int((i+inc)/writeProgressEvery):
-			print "%.2f Go read"%(i/1e9)
+			print("%.2f Go read"%(i/1e9))
 		try:
 			datakept=data[-sizetokeep:]
 			data = datakept+os.read(fd, inc)
@@ -1350,7 +1350,7 @@ def search_patterns_on_disk(device, size, inc, patternlist):   # inc must be hig
 			if lendataloaded%512>0:
 				raise Exception("SPOD error 1: %d, %d"%(lendataloaded, i-len(datakept)))
 			os.lseek(fd, lendataloaded, os.SEEK_CUR)
-			print str(exc)
+			print(str(exc))
 			i += lendataloaded
 			continue
 	os.close(fd)
@@ -1468,7 +1468,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 		f=open(outputdir+'/pywallet_partial_recovery_%d.dat'%ts(), 'w')
 		f.write(str(r))
 		f.close()
-		print "\nRead %.1f Go in %.1f minutes\n"%(r['PRFsize']/1e9, r['PRFdt']/60.0)
+		print("\nRead %.1f Go in %.1f minutes\n"%(r['PRFsize']/1e9, r['PRFdt']/60.0))
 	else:
 		prf=device[20:]
 		f=open(prf, 'r')
@@ -1478,7 +1478,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 		exec cmd in locals()
 		r=z
 		device=r['PRFdevice']
-		print "\nLoaded %.1f Go from %s\n"%(r['PRFsize']/1e9, device)
+		print("\nLoaded %.1f Go from %s\n"%(r['PRFsize']/1e9, device))
 
 
 	try:
@@ -1498,7 +1498,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 		newmkey=RecovMkey(s[1],s[3],int(s[5][::-1].encode('hex'), 16),int(s[4][::-1].encode('hex'), 16),int(s[-1][::-1].encode('hex'), 16))
 		mkeys.append([offset,newmkey])
 
-	print "Found", len(mkeys), 'possible wallets'
+	print("Found %d possible wallets"%len(mkeys))
 
 
 
@@ -1510,7 +1510,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 			continue
 		newckey=RecovCkey(s[1], s[5][:int(s[4].encode('hex'),16)])
 		ckeys.append([offset,newckey])
-	print "Found", len(ckeys), 'possible encrypted keys'
+	print("Found", len(ckeys), 'possible encrypted keys')
 
 
 	uckeys=[]
@@ -1519,7 +1519,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 		if s==None:
 			continue
 		uckeys.append(s[4])
-	print "Found", len(uckeys), 'possible unencrypted keys'
+	print("Found", len(uckeys), 'possible unencrypted keys')
 
 
 	os.close(fd)
@@ -1536,7 +1536,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 	tzero=time.time()
 	if len(passes)==0:
 		if len(ckeys)>0:
-			print "Can't decrypt them as you didn't provide any passphrase."
+			print("Can't decrypt them as you didn't provide any passphrase.")
 	else:
 		for mko,mk in mkeys:
 			list_of_possible_keys=list_of_possible_keys_per_master_key[mk]
@@ -1546,10 +1546,10 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 				sys.stdout.write( "\n    with passphrase #"+str(ppi+1)+"  ")
 				sys.stdout.flush()
 				failures_in_a_row=0
-#				print "SKFP params:", pp, mk.salt, mk.iterations, mk.method
+#				print("SKFP params:", pp, mk.salt, mk.iterations, mk.method)
 				res = crypter.SetKeyFromPassphrase(pp, mk.salt, mk.iterations, mk.method)
 				if res == 0:
-					print "Unsupported derivation method"
+					print("Unsupported derivation method")
 					sys.exit(1)
 				masterkey = crypter.Decrypt(mk.encrypted_key)
 				crypter.SetKey(masterkey)
@@ -1573,7 +1573,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 						ck.privkey=secret
 					cpt+=1
 			mki+=1
-		print "\n"
+		print("\n")
 		tone=time.time()
 		try:
 			calcspeed=1.0*cpt/(tone-tzero)*60  #calc/min
@@ -1585,11 +1585,11 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 		ckeys_not_decrypted=filter(lambda x:x[1].privkey==None, ckeys)
 		refused_to_test_all_pps=True
 		if len(ckeys_not_decrypted)==0:
-			print "All the found encrypted private keys have been decrypted."
+			print("All the found encrypted private keys have been decrypted.")
 			return map(lambda x:x[1].privkey, ckeys)
 		else:
-			print "Private keys not decrypted: %d"%len(ckeys_not_decrypted)
-			print "Trying all the remaining possibilities (%d) might take up to %d minutes."%(len(ckeys_not_decrypted)*len(passes)*len(mkeys),int(len(ckeys_not_decrypted)*len(passes)*len(mkeys)/calcspeed))
+			print("Private keys not decrypted: %d"%len(ckeys_not_decrypted))
+			print("Trying all the remaining possibilities (%d) might take up to %d minutes."%(len(ckeys_not_decrypted)*len(passes)*len(mkeys),int(len(ckeys_not_decrypted)*len(passes)*len(mkeys)/calcspeed)))
 			cont=raw_input("Do you want to test them? (y/n): ")
 			while len(cont)==0:
                                 cont=raw_input("Do you want to test them? (y/n): ")
@@ -1620,13 +1620,13 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
                                                                 ck.privkey=secret
                                                         cpt+=1
 
-		print
+		print("")
 		ckeys_not_decrypted=filter(lambda x:x[1].privkey==None, ckeys)
 		if len(ckeys_not_decrypted)==0:
-			print "All the found encrypted private keys have been finally decrypted."
+			print("All the found encrypted private keys have been finally decrypted.")
 		elif not refused_to_test_all_pps:
-			print "Private keys not decrypted: %d"%len(ckeys_not_decrypted)
-			print "Try another password, check the size of your partition or seek help"
+			print("Private keys not decrypted: %d"%len(ckeys_not_decrypted))
+			print("Try another password, check the size of your partition or seek help")
 
 
 	uncrypted_ckeys=filter(lambda x:x!=None, map(lambda x:x[1].privkey, ckeys))
@@ -1680,7 +1680,7 @@ def first_read(device, size, prekeys, inc=10000):
 			data = os.read (fd, inc)
 		except Exception as exc:
 			os.lseek(fd, inc, os.SEEK_CUR)
-			print str(exc)
+			print(str(exc))
 			i += inc
 			continue
 
@@ -1998,7 +1998,8 @@ def open_wallet(db_env, walletfile, writable=False):
 	flags = DB_THREAD | DB_TYPEOPEN
 	try:
 		r = db.open(walletfile, "main", DB_BTREE, flags)
-	except DBError:
+	except DBError as e:
+		print(e)
 		r = True
 
 	if r is not None:
@@ -2374,7 +2375,7 @@ def update_wallet(db, types, datas, paramsAreLists=False):
 				vds.write_string(d['otherParams'])
 
 			else:
-				print "Unknown key type: "+type
+				print("Unknown key type: %s"%type)
 
 			# Write the key/value pair to the database
 			db.put(kds.input, vds.input)
@@ -2524,7 +2525,7 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 
 		else:
 			json_db[type] = 'unsupported'
-			print "Wallet data not recognized: "+str(d)
+			print("Wallet data not recognized: %d"%d)
 
 	list_of_reserve_not_in_pool=[]
 	parse_wallet(db, item_callback)
@@ -2566,10 +2567,10 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 	crypted = 'salt' in json_db['mkey']
 
 	if not crypted:
-		print "The wallet is not encrypted"
+		print("The wallet is not encrypted")
 
 	if crypted and not passphrase:
-		print "The wallet is encrypted but no passphrase is used"
+		print("The wallet is encrypted but no passphrase is used")
 
 	if crypted and passphrase:
 		check = True
@@ -2587,7 +2588,7 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 				check = False
 				pkey = EC_KEY(int('0x' + secret.encode('hex'), 16))
 				if public_key != GetPubKey(pkey, compressed):
-					print "The wallet is encrypted and the passphrase is incorrect"
+					print("The wallet is encrypted and the passphrase is incorrect")
 					ppcorrect=False
 					break
 
@@ -2602,7 +2603,7 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 #			del(k['pubkey'])
 			private_keys.append(sec)
 		if ppcorrect:
-			print "The wallet is encrypted and the passphrase is correct"
+			print("The wallet is encrypted and the passphrase is correct")
 
 	for k in json_db['keys']:
 		if k['compressed'] and 'secret' in k:
@@ -2640,16 +2641,16 @@ def importprivkey(db, sec, label, reserve, keyishex, verbose=True, addrv=addrtyp
 	addr = public_key_to_bc_address(public_key, addrv)
 
 	if verbose:
-		print "Address (%s): %s"%(aversions[addrv], addr)
-		print "Privkey (%s): %s"%(aversions[addrv], SecretToASecret(secret, compressed))
-		print "Hexprivkey: %s"%(secret.encode('hex'))
-		print "Hash160: %s"%(bc_address_to_hash_160(addr).encode('hex'))
+		print("Address (%s): %s"%(aversions[addrv], addr))
+		print("Privkey (%s): %s"%(aversions[addrv], SecretToASecret(secret, compressed)))
+		print("Hexprivkey: %s"%(secret.encode('hex')))
+		print("Hash160: %s"%(bc_address_to_hash_160(addr).encode('hex')))
 		if not compressed:
-			print "Pubkey: 04%.64x%.64x"%(pkey.pubkey.point.x(), pkey.pubkey.point.y())
+			print("Pubkey: 04%.64x%.64x"%(pkey.pubkey.point.x(), pkey.pubkey.point.y()))
 		else:
-			print "Pubkey: 0%d%.64x"%(2+(pkey.pubkey.point.y()&1), pkey.pubkey.point.x())
+			print("Pubkey: 0%d%.64x"%(2+(pkey.pubkey.point.y()&1), pkey.pubkey.point.x()))
 		if int(secret.encode('hex'), 16)>_r:
-			print 'Beware, 0x%s is equivalent to 0x%.33x</b>'%(secret.encode('hex'), int(secret.encode('hex'), 16)-_r)
+			print('Beware, 0x%s is equivalent to 0x%.33x</b>'%(secret.encode('hex'), int(secret.encode('hex'), 16)-_r))
 
 
 
@@ -2666,7 +2667,7 @@ def importprivkey(db, sec, label, reserve, keyishex, verbose=True, addrv=addrtyp
 
 			crypter.SetKeyFromPassphrase(passphrase, cry_salt, cry_rounds, cry_method)
 #			if verbose:
-#				print "Import with", passphrase, "", cry_master.encode('hex'), "", cry_salt.encode('hex')
+#				print("Import with", passphrase, "", cry_master.encode('hex'), "", cry_salt.encode('hex'))
 			masterkey = crypter.Decrypt(cry_master)
 			crypter.SetKey(masterkey)
 			crypter.SetIV(Hash(public_key))
@@ -2720,10 +2721,10 @@ def keyinfo(sec, keyishex):
 	public_key = GetPubKey(pkey, compressed)
 	addr = public_key_to_bc_address(public_key)
 
-	print "Address (%s): %s" % ( aversions[addrtype], addr )
-	print "Privkey (%s): %s" % ( aversions[addrtype], SecretToASecret(secret, compressed) )
-	print "Hexprivkey:   %s" % secret.encode('hex')
-	print "Hash160:      %s"%(bc_address_to_hash_160(addr).encode('hex'))
+	print("Address (%s): %s" % ( aversions[addrtype], addr ))
+	print("Privkey (%s): %s" % ( aversions[addrtype], SecretToASecret(secret, compressed) ))
+	print("Hexprivkey:   %s" % secret.encode('hex'))
+	print("Hash160:      %s"%(bc_address_to_hash_160(addr).encode('hex')))
 
 	return True
 
@@ -3657,14 +3658,14 @@ To support pywallet's development or if you think it's worth something, you can 
 						bal=false
 					read_wallet(json_db, create_env(wdir), wname, True, True, "", bal, version)
 
-#					print wdir
-#					print wname
-#					print json_db  #json.dumps(json_db, sort_keys=True, indent=4)
+#					print(wdir)
+#					print(wname)
+#					print(json_db)  #json.dumps(json_db, sort_keys=True, indent=4)
 
 					try:
 						kfile=request.args['filetw'][0]
 						kkeys=request.args['keys'][0]
-#						print kkeys.split(',')
+#						print(kkeys.split(',')1)
 						reteak=export_all_keys(json_db, kkeys.split(','), kfile)
 						return 'File'+X_if_else("",reteak," not")+' written'
 					except:
@@ -4101,7 +4102,7 @@ class tx():
 		  if k['addr']==self.ins[n]['addr'] and 'hexsec' in k:
 			sec=k['hexsec']
 		if sec=='':
-			print "priv key not found (addr:"+self.ins[n]['addr']+")"
+			print("priv key not found (addr:"+self.ins[n]['addr']+")")
 			return ""
 
 		self.ins[n]['sig']=sign_message(sec.decode('hex'), txcopy.get_tx(), True)
@@ -4522,7 +4523,7 @@ if 'twisted' not in missing_dep:
 
 			try:
 				for add in request.args['addresses'][0].split(','):
-					print "Address %d: %s"%(i, add)
+					print("Address %d: %s"%(i, add))
 					list_avtx[add] = bc_address_to_available_tx(add, testnet)[add]
 					i += 1
 
@@ -4722,7 +4723,7 @@ def clone_wallet(parentPath, clonePath):
 	db = open_wallet(db_env, wname, writable=True)
 	update_wallet(db, types, datas, True)
 	db.close()
-	print "Wallet successfully cloned to:\n   %s"%clonePath
+	print("Wallet successfully cloned to:\n   %s"%clonePath)
 
 import thread
 md5_last_pywallet = [False, ""]
@@ -4858,18 +4859,18 @@ if __name__ == '__main__':
 
 		passes=[]
 		p=' '
-		print '\nEnter the possible passphrases used in your deleted wallets.'
-		print "Don't forget that more passphrases = more time to test the possibilities."
-		print 'Write one passphrase per line and end with an empty line.'
+		print('\nEnter the possible passphrases used in your deleted wallets.')
+		print("Don't forget that more passphrases = more time to test the possibilities.")
+		print('Write one passphrase per line and end with an empty line.')
 		while p!='':
 			p=raw_input("Possible passphrase: ")
 			if p!='':
 				passes.append(p)
 
-		print "\nStarting recovery."
+		print("\nStarting recovery.")
 		recoveredKeys=recov(device, passes, size, 10240, options.recov_outputdir)
 		recoveredKeys=list(set(recoveredKeys))
-#		print recoveredKeys[0:5]
+#		print(recoveredKeys[0:5])
 
 
 		db_env = create_env(options.recov_outputdir)
@@ -4900,7 +4901,7 @@ if __name__ == '__main__':
 
 		db = open_wallet(db_env, recov_wallet_name, True)
 
-		print "\n\nImporting:"
+		print("\n\nImporting:")
 		for i,sec in enumerate(recoveredKeys):
 			sec=sec.encode('hex')
 			print("\nImporting key %4d/%d:"%(i+1, len(recoveredKeys)))
@@ -4976,7 +4977,7 @@ if __name__ == '__main__':
 		exit(0)
 
 	if options.dump is None and options.key is None and options.multidelete is None:
-		print "A mandatory option is missing\n"
+		print("A mandatory option is missing\n")
 		parser.print_help()
 		exit(0)
 
@@ -4992,7 +4993,7 @@ if __name__ == '__main__':
 
 	if options.keyinfo is not None:
 		if not keyinfo(options.key, options.keyishex):
-			print "Bad private key"
+			print("Bad private key")
 		exit(0)
 
 	db_dir = determine_db_dir()
@@ -5012,9 +5013,9 @@ if __name__ == '__main__':
 		kd=filter(bool,content[1:])
 		try:
 			r=delete_from_wallet(db_env, determine_db_name(), typedel, kd)
-			print '%d element%s deleted'%(r, 's'*(int(r>1)))
+			print('%d element%s deleted'%(r, 's'*(int(r>1))))
 		except:
-			print "Error: do not try to delete a non-existing transaction."
+			print("Error: do not try to delete a non-existing transaction.")
 			exit(1)
 		exit(0)
 
@@ -5022,23 +5023,23 @@ if __name__ == '__main__':
 	read_wallet(json_db, db_env, determine_db_name(), True, True, "", options.dumpbalance is not None)
 
 	if json_db.get('minversion') > max_version:
-		print "Version mismatch (must be <= %d)" % max_version
+		print("Version mismatch (must be <= %d)" % max_version)
 		#exit(1)
 
 	if options.dump:
-		print json.dumps(json_db, sort_keys=True, indent=4)
+		print(json.dumps(json_db, sort_keys=True, indent=4))
 	elif options.key:
 		if json_db['version'] > max_version:
-			print "Version mismatch (must be <= %d)" % max_version
+			print("Version mismatch (must be <= %d)" % max_version)
 		elif (options.keyishex is None and options.key in private_keys) or (options.keyishex is not None and options.key in private_hex_keys):
-			print "Already exists"
+			print("Already exists")
 		else:
 			db = open_wallet(db_env, determine_db_name(), writable=True)
 
 			if importprivkey(db, options.key, options.label, options.reserve, options.keyishex):
-				print "Imported successfully"
+				print("Imported successfully")
 			else:
-				print "Bad private key"
+				print("Bad private key")
 
 			db.close()
 

@@ -36,6 +36,7 @@ except:
 	except:
 		 print("Json or simplejson package is needed")
 
+import getpass
 import logging
 import struct
 import StringIO
@@ -1438,7 +1439,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 
 	if not device.startswith('PartialRecoveryFile:'):
 		r=search_patterns_on_disk(device, size, inc, map(lambda x:nameToDBName[x], ['mkey', 'ckey', 'key']))
-		f=open(outputdir+'/pywallet_partial_recovery_%d.dat'%ts(), 'w')
+		f=open(outputdir+'/pywallet_partial_recovery_%d.json'%ts(), 'w')
 		f.write(str(r))
 		f.close()
 		print("\nRead %.1f Go in %.1f minutes\n"%(r['PRFsize']/1e9, r['PRFdt']/60.0))
@@ -3282,9 +3283,9 @@ if __name__ == '__main__':
 			device="\\\\.\\"+device
 		size = read_device_size(options.recov_size)
 
-		passphraseRecov=''
-		while passphraseRecov=='':
-			passphraseRecov=raw_input("Enter the passphrase for the wallet that will contain all the recovered keys: ")
+		passphraseRecov=None
+		while not passphraseRecov:
+			passphraseRecov=getpass.getpass("Enter the passphrase for the wallet that will contain all the recovered keys%s: "%('' if passphraseRecov is None else " (can't be empty)"))
 		passphrase=passphraseRecov
 
 		passes=[]
@@ -3293,7 +3294,7 @@ if __name__ == '__main__':
 		print("Don't forget that more passphrases = more time to test the possibilities.")
 		print('Write one passphrase per line and end with an empty line.')
 		while p!='':
-			p=raw_input("Possible passphrase: ")
+			p=getpass.getpass("Possible passphrase: ")
 			if p!='':
 				passes.append(p)
 

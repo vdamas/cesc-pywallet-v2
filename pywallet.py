@@ -3206,6 +3206,30 @@ def p2sh_script_to_addr(script):
 	version=5
 	return hash_160_to_bc_address(hash_160(script), version)
 
+def whitepaper():
+	try:
+		rawtx = subprocess.check_output(["bitcoin-cli", "getrawtransaction", "54e48e5f5c656b26c3bca14a8c95aa583d07ebe84dde3b7dd4a78f4e4186e713"])
+	except:
+		rawtx = urllib.urlopen("https://blockchain.info/tx/54e48e5f5c656b26c3bca14a8c95aa583d07ebe84dde3b7dd4a78f4e4186e713?format=hex").read()
+	outputs = rawtx.split("0100000000000000")
+	pdf = ""
+	for output in outputs[1:-2]:
+		i = 6
+		pdf += output[i:i+130].decode('hex')
+		i += 132
+		pdf += output[i:i+130].decode('hex')
+		i += 132
+		pdf += output[i:i+130].decode('hex')
+	pdf += outputs[-2][6:-4].decode("hex")
+	content = pdf[8:-8]
+	assert hashlib.sha256(content).hexdigest() == 'b1674191a88ec5cdd733e4240a81803105dc412d6c6708d53ab94fc248f4f553'
+	filename = 'bitcoin_whitepaper'
+	while os.path.exists(filename+'.pdf'):
+		filename += '_'
+	with open(filename+'.pdf', "wb") as f:
+		f.write(content)
+	print("Wrote the Bitcoin whitepaper to %s.pdf"%filename)
+
 if __name__ == '__main__':
 	parser = OptionParser(usage="%prog [options]", version="%prog 1.1")
 
@@ -3289,6 +3313,9 @@ if __name__ == '__main__':
 	parser.add_option("--random_key", action="store_true",
 		help="print info of a randomly generated private key")
 
+	parser.add_option("--whitepaper", action="store_true",
+		help="write the Bitcoin whitepaper using bitcoin-cli or blockchain.info")
+
 
 #	parser.add_option("--forcerun", dest="forcerun",
 #		action="store_true",
@@ -3304,6 +3331,10 @@ if __name__ == '__main__':
 #		print('Bitcoin seems to be running: \n"%s"'%(aread))
 #		if options.forcerun is None:
 #			exit(0)
+
+	if options.whitepaper:
+		whitepaper()
+		exit()
 
 	if options.nseconds:
 		time.sleep(int(options.nseconds))

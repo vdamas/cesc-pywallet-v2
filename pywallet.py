@@ -10,8 +10,8 @@ never_update=False
 #
 
 
-
-
+import sys
+PY3 = sys.version_info.major >2
 beta_version =  ('a' in pywversion.split('-')[0]) or ('b' in pywversion.split('-')[0])
 
 missing_dep = []
@@ -49,6 +49,7 @@ import hashlib
 import random
 import urllib
 import math
+import base64
 
 from datetime import datetime
 from subprocess import *
@@ -2625,19 +2626,22 @@ def keyinfo(sec, keyishex, addrv=addrtype, print_info=False, force_compressed=No
 	private_key = GetPrivKey(pkey, compressed)
 	public_key = GetPubKey(pkey, compressed)
 	addr = public_key_to_bc_address(public_key, addrv)
+	ser_public_key = (b'%02d%.64x'%(4 if not compressed else 2+(pkey.pubkey.point.y()&1), pkey.pubkey.point.x()) + (b'%.64x'%pkey.pubkey.point.y())*int(not compressed)).decode('hex')
 
 	if print_info:
 		print("Compressed: %s"%str(compressed))
-		print("Address (%s): %s"%(aversions[addrv], addr))
-		print("Privkey (%s): %s"%(aversions[addrv], SecretToASecret(secret, compressed)))
+		if True:
+			print("P2PKH Address:       %s"%(addr))
+		if compressed:
+			print("P2SH-P2WPKH Address: %s"%(p2sh_script_to_addr(b'\x00\x14'+hash_160(ser_public_key))))
+		if compressed:
+			print("P2WPKH Address:      %s"%(witprog_to_bech32_addr(hash_160(ser_public_key))))
+		print("Privkey: %s"%(SecretToASecret(secret, compressed)))
 		print("Hexprivkey: %s"%(secret.encode('hex')))
 		if compressed:
 			print("    For compressed keys, the hexadecimal private key sometimes contains an extra '01' at the end")
 		print("Hash160: %s"%(bc_address_to_hash_160(addr).encode('hex')))
-		if not compressed:
-			print("Pubkey: 04%.64x%.64x"%(pkey.pubkey.point.x(), pkey.pubkey.point.y()))
-		else:
-			print("Pubkey: 0%d%.64x"%(2+(pkey.pubkey.point.y()&1), pkey.pubkey.point.x()))
+		print("Pubkey: %s"%ser_public_key.encode('hex'))
 		if int(secret.encode('hex'), 16)>_r:
 			print('Beware, 0x%s is equivalent to 0x%.33x</b>'%(secret.encode('hex'), int(secret.encode('hex'), 16)-_r))
 
@@ -3165,9 +3169,44 @@ def retrieve_last_pywallet_md5():
 
 from optparse import OptionParser
 
+def bech32_polymod(values):
+  GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3]
+  chk = 1
+  for v in values:
+    b = (chk >> 25)
+    chk = (chk & 0x1ffffff) << 5 ^ v
+    for i in range(5):
+      chk ^= GEN[i] if ((b >> i) & 1) else 0
+  return chk
+
+def bech32_hrp_expand(s):
+  return [ord(x) >> 5 for x in s] + [0] + [ord(x) & 31 for x in s]
+
+def bech32_verify_checksum(hrp, data):
+  return bech32_polymod(bech32_hrp_expand(hrp) + data) == 1
+
+def bech32_create_checksum(hrp, data):
+  values = bech32_hrp_expand(hrp) + data
+  polymod = bech32_polymod(values + [0,0,0,0,0,0]) ^ 1
+  return [(polymod >> 5 * (5 - i)) & 31 for i in range(6)]
+
+BECH32_ALPH='qpzry9x8gf2tvdw0s3jn54khce6mua7l'
+BASE32_ALPH='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+def witprog_to_bech32_addr(witprog, witv=0, hrp='bc'):
+	x=base64.b32encode(witprog)
+	if PY3:x=x.decode()
+	x=x.replace('=', '')
+	data=[witv]+list(map(lambda y:BASE32_ALPH.index(y), x))
+	combined = data + bech32_create_checksum(hrp, data)
+	addr=hrp+'1'+''.join([BECH32_ALPH[d] for d in combined])
+	return addr
+
+def p2sh_script_to_addr(script):
+	version=5
+	return hash_160_to_bc_address(hash_160(script), version)
+
 if __name__ == '__main__':
-
-
 	parser = OptionParser(usage="%prog [options]", version="%prog 1.1")
 
 	parser.add_option("--passphrase", dest="passphrase",

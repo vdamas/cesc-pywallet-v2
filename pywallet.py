@@ -1114,11 +1114,11 @@ def bc_address_to_hash_160(addr):
 	return bytes[1:21]
 
 __b58chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-__b58base = len(__b58chars)
 
-def b58encode(v):
+def b58encode(v, __b58chars=__b58chars):
 	""" encode v, which is a string of bytes, to base58.
 	"""
+	__b58base = len(__b58chars)
 
 	long_value = 0
 	for (i, c) in enumerate(v[::-1]):
@@ -1140,9 +1140,10 @@ def b58encode(v):
 
 	return (__b58chars[0]*nPad) + result
 
-def b58decode(v, length):
+def b58decode(v, length, __b58chars=__b58chars):
 	""" decode v into a string of len bytes
 	"""
+	__b58base = len(__b58chars)
 	long_value = 0
 	for (i, c) in enumerate(v[::-1]):
 		long_value += __b58chars.find(c) * (__b58base**i)
@@ -1175,12 +1176,12 @@ def long_hex(bytes):
 def Hash(data):
 	return hashlib.sha256(hashlib.sha256(data).digest()).digest()
 
-def EncodeBase58Check(secret):
+def EncodeBase58Check(secret, __b58chars=__b58chars):
 	hash = Hash(secret)
-	return b58encode(secret + hash[0:4])
+	return b58encode(secret + hash[0:4], __b58chars)
 
-def DecodeBase58Check(sec):
-	vchRet = b58decode(sec, None)
+def DecodeBase58Check(sec, __b58chars=__b58chars):
+	vchRet = b58decode(sec, None, __b58chars)
 	secret = vchRet[0:-4]
 	csum = vchRet[-4:]
 	hash = Hash(secret)

@@ -3098,19 +3098,8 @@ def update_pyw():
 			filout = open(pyw_path+"/"+pyw_filename, 'w')
 			filout.write(dl)
 			filout.close()
-			thread.start_new_thread(restart_pywallet, ())
-			return "Updated, restarting..."
 		else:
 			return "Problem when downloading new version ("+md5_2(dl)+"/"+md5_last_pywallet[1]+")"
-
-def restart_pywallet():
-	thread.start_new_thread(start_pywallet, ())
-	time.sleep(2)
-	reactor.stop()
-
-def start_pywallet():
-	a=Popen("python "+pyw_path+"/"+pyw_filename+" --web --port "+str(webport)+" --wait 3", shell=True, bufsize=-1, stdout=PIPE).stdout
-	a.close()
 
 def clone_wallet(parentPath, clonePath):
 	types,datas=[],[]
@@ -3280,12 +3269,6 @@ if __name__ == '__main__':
 
 	parser.add_option("--balance", dest="key_balance",
 		help="prints balance of KEY_BALANCE")
-
-	parser.add_option("--web", dest="web", action="store_true",
-		help="run pywallet web interface")
-
-	parser.add_option("--port", dest="port",
-		help="port of web interface (defaults to 8989)")
 
 	parser.add_option("--recover", dest="recover", action="store_true",
 		help="recover your deleted keys, use with recov_size and recov_device")

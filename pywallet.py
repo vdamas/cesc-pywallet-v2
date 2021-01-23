@@ -3286,6 +3286,9 @@ if __name__ == '__main__':
 	parser.add_option("--wait", dest="nseconds",
 		help="wait NSECONDS seconds before launch")
 
+	parser.add_option("--random_key", action="store_true",
+		help="print info of a randomly generated private key")
+
 
 #	parser.add_option("--forcerun", dest="forcerun",
 #		action="store_true",
@@ -3412,21 +3415,24 @@ if __name__ == '__main__':
 		print(balance(balance_site, options.key_balance))
 		exit(0)
 
-	if options.dump is None and options.key is None and options.multidelete is None:
-		print("A mandatory option is missing\n")
-		parser.print_help()
-		exit(0)
-
 	if options.namecoin or options.otherversion is not None:
 		if options.namecoin:
 			addrtype = 52
 		else:
 			addrtype = int(options.otherversion)
 
-	if options.keyinfo is not None:
+	if options.keyinfo is not None or options.random_key:
+		if not options.keyinfo:
+			options.key = os.urandom(32).encode('hex')
+			options.keyishex = True
 		keyinfo(options.key, options.keyishex, addrtype, True, False)
 		print("")
 		keyinfo(options.key, options.keyishex, addrtype, True, True)
+		exit(0)
+
+	if options.dump is None and options.key is None and options.multidelete is None:
+		print("A mandatory option is missing\n")
+		parser.print_help()
 		exit(0)
 
 	if options.testnet:

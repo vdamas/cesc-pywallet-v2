@@ -50,6 +50,7 @@ import random
 import urllib
 import math
 import base64
+import collections
 
 from datetime import datetime
 from subprocess import *
@@ -59,7 +60,6 @@ import os.path
 import platform
 
 max_version = 81000
-addrtype = 0
 json_db = {}
 private_keys = []
 private_hex_keys = []
@@ -74,6 +74,11 @@ aversions[0] = 'Bitcoin';
 aversions[48] = 'Litecoin';
 aversions[52] = 'Namecoin';
 aversions[111] = 'Testnet';
+
+Network = collections.namedtuple('Network', 'name p2pkh_prefix p2sh_prefix wif_prefix segwit_hrp')
+network_bitcoin = Network('Bitcoin', 0, 5, 0x80, 'bc')
+network_bitcoin_testnet3 = Network('Bitcoin-Testnet3', 0x6f, 0xc4, 0xef, 'tb')
+network = network_bitcoin
 
 wallet_dir = ""
 wallet_name = ""
@@ -1097,13 +1102,13 @@ def hash_160(public_key):
 
 def public_key_to_bc_address(public_key, v=None):
 	if v==None:
-		v=addrtype
+		v=network.p2pkh_prefix
 	h160 = hash_160(public_key)
 	return hash_160_to_bc_address(h160, v)
 
 def hash_160_to_bc_address(h160, v=None):
 	if v==None:
-		v=addrtype
+		v=network.p2pkh_prefix
 	vh160 = chr(v) + h160
 	h = Hash(vh160)
 	addr = vh160 + h[0:4]
@@ -1206,9 +1211,7 @@ def PrivKeyToSecret(privkey):
 		return privkey[8:8+32]
 
 def SecretToASecret(secret, compressed=False):
-	prefix = chr((addrtype+128)&255)
-	if addrtype==48:  #assuming Litecoin
-		prefix = chr(128)
+	prefix = chr(network.wif_prefix)
 	vchIn = prefix + secret
 	if compressed: vchIn += '\01'
 	return EncodeBase58Check(vchIn)
@@ -1217,8 +1220,8 @@ def ASecretToSecret(sec):
 	vch = DecodeBase58Check(sec)
 	if not vch:
 		return False
-	if vch[0] != chr((addrtype+128)&255):
-		print('Warning: adress prefix seems bad (%d vs %d)'%(ord(vch[0]), (addrtype+128)&255))
+	if vch[0] != chr(network.wif_prefix):
+		print('Warning: adress prefix seems bad (%d vs %d)'%(ord(vch[0]), network.wif_prefix))
 	return vch[1:]
 
 def regenerate_key(sec):
@@ -2398,17 +2401,12 @@ def rewrite_wallet(db_env, walletfile, destFileName, pre_put_callback=None):
 # wallet.dat reader / writer
 
 addr_to_keys={}
-def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transactions, transaction_filter, include_balance, vers=-1, FillPool=False):
+def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transactions, transaction_filter, include_balance, FillPool=False):
 	global passphrase, addr_to_keys
 	crypted=False
 
 	private_keys = []
 	private_hex_keys = []
-
-	if vers > -1:
-		global addrtype
-		oldaddrtype = addrtype
-		addrtype = vers
 
 	db = open_wallet(db_env, walletfile, writable=FillPool)
 
@@ -2581,8 +2579,6 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 
 #	del(json_db['pool'])
 #	del(json_db['names'])
-	if vers > -1:
-		addrtype = oldaddrtype
 
 	return {'crypted':crypted}
 
@@ -2618,7 +2614,8 @@ def parse_private_key(sec, keyishex, force_compressed=None):
 			exit()
 	return (pkey, compressed)
 
-def keyinfo(sec, keyishex, addrv=addrtype, print_info=False, force_compressed=None):
+def keyinfo(sec, keyishex, network=None, print_info=False, force_compressed=None):
+	network = network or network_bitcoin
 	(pkey, compressed) = parse_private_key(sec, keyishex, force_compressed)
 	if not pkey:
 		return False
@@ -2626,30 +2623,40 @@ def keyinfo(sec, keyishex, addrv=addrtype, print_info=False, force_compressed=No
 	secret = GetSecret(pkey)
 	private_key = GetPrivKey(pkey, compressed)
 	public_key = GetPubKey(pkey, compressed)
-	addr = public_key_to_bc_address(public_key, addrv)
+	addr = public_key_to_bc_address(public_key, network.p2pkh_prefix)
 	ser_public_key = (b'%02d%.64x'%(4 if not compressed else 2+(pkey.pubkey.point.y()&1), pkey.pubkey.point.x()) + (b'%.64x'%pkey.pubkey.point.y())*int(not compressed)).decode('hex')
 
 	if print_info:
+		print("Network: %s"%network.name)
 		print("Compressed: %s"%str(compressed))
-		if True:
+		if network.p2pkh_prefix != None:
 			print("P2PKH Address:       %s"%(addr))
 		if compressed:
-			print("P2SH-P2WPKH Address: %s"%(p2sh_script_to_addr(b'\x00\x14'+hash_160(ser_public_key))))
+			if network.p2sh_prefix != None:
+				print("P2SH-P2WPKH Address: %s"%(p2sh_script_to_addr(b'\x00\x14'+hash_160(ser_public_key))))
+			else:
+				print("P2SH unavailable:    unknown network P2SH prefix")
 		if compressed:
-			print("P2WPKH Address:      %s"%(witprog_to_bech32_addr(hash_160(ser_public_key))))
-		print("Privkey: %s"%(SecretToASecret(secret, compressed)))
-		print("Hexprivkey: %s"%(secret.encode('hex')))
+			if network.segwit_hrp != None:
+				print("P2WPKH Address:      %s"%(witprog_to_bech32_addr(hash_160(ser_public_key), network)))
+			else:
+				print("P2WPKH unavailable:  unknown network SegWit HRP")
+		if network.wif_prefix != None:
+			print("Privkey:             %s"%(SecretToASecret(secret, compressed)))
+		else:
+			print("Privkey unavailable: unknown network WIF prefix")
+		print("Hexprivkey:          %s"%(secret.encode('hex')))
 		if compressed:
 			print("    For compressed keys, the hexadecimal private key sometimes contains an extra '01' at the end")
-		print("Hash160: %s"%(bc_address_to_hash_160(addr).encode('hex')))
-		print("Pubkey: %s"%ser_public_key.encode('hex'))
+		print("Hash160:             %s"%(bc_address_to_hash_160(addr).encode('hex')))
+		print("Pubkey:              %s"%ser_public_key.encode('hex'))
 		if int(secret.encode('hex'), 16)>_r:
-			print('Beware, 0x%s is equivalent to 0x%.33x</b>'%(secret.encode('hex'), int(secret.encode('hex'), 16)-_r))
+			print('/!\\ Beware, 0x%s is equivalent to 0x%.33x'%(secret.encode('hex'), int(secret.encode('hex'), 16)-_r))
 
 	return (secret, private_key, public_key, addr)
 
-def importprivkey(db, sec, label, reserve, keyishex, verbose=True, addrv=addrtype):
-	(secret, private_key, public_key, addr) = keyinfo(sec, keyishex, addrv, verbose)
+def importprivkey(db, sec, label, reserve, keyishex, verbose=True):
+	(secret, private_key, public_key, addr) = keyinfo(sec, keyishex, network, verbose)
 
 	global crypter, passphrase, json_db
 	crypted = False
@@ -2737,22 +2744,19 @@ def import_csv_keys(filename, wdir, wname, nbremax=9999999):
 	  if ';' in c and len(c)>0 and c[0]!="#":
 		cs=c.split(';')
 		sec,label=cs[0:2]
-		v=addrtype
-		if len(cs)>2:
-			v=int(cs[2])
 		reserve=False
 		if label=="#Reserve":
 			reserve=True
 		keyishex=None
 		if abs(len(sec)-65)==1:
 			keyishex=True
-		importprivkey(db, sec, label, reserve, keyishex, verbose=False, addrv=v)
+		importprivkey(db, sec, label, reserve, keyishex, verbose=False)
 
 	global_merging_message = ["Merging done.", ""]
 
 	db.close()
 
-	read_wallet(json_db, db_env, wname, True, True, "", None, -1, True)  #Fill the pool if empty
+	read_wallet(json_db, db_env, wname, True, True, "", None, True)  #Fill the pool if empty
 
 	return True
 
@@ -3183,13 +3187,13 @@ def bech32_create_checksum(hrp, data):
 BECH32_ALPH='qpzry9x8gf2tvdw0s3jn54khce6mua7l'
 BASE32_ALPH='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
 
-def witprog_to_bech32_addr(witprog, witv=0, hrp='bc'):
-	x=base64.b32encode(witprog)
-	if PY3:x=x.decode()
-	x=x.replace('=', '')
-	data=[witv]+list(map(lambda y:BASE32_ALPH.index(y), x))
-	combined = data + bech32_create_checksum(hrp, data)
-	addr=hrp+'1'+''.join([BECH32_ALPH[d] for d in combined])
+def witprog_to_bech32_addr(witprog, network, witv=0):
+	x = base64.b32encode(witprog)
+	if PY3:x = x.decode()
+	x = x.replace('=', '')
+	data = [witv]+list(map(lambda y:BASE32_ALPH.index(y), x))
+	combined = data + bech32_create_checksum(network.segwit_hrp, data)
+	addr = network.segwit_hrp+'1'+''.join([BECH32_ALPH[d] for d in combined])
 	return addr
 
 def p2sh_script_to_addr(script):
@@ -3256,7 +3260,7 @@ if __name__ == '__main__':
 		help="use namecoin address type")
 
 	parser.add_option("--otherversion", dest="otherversion",
-		help="use other network address type, whose version is OTHERVERSION")
+		help="use other network address type, either P2PKH prefix only (e.g. 111) or full network info as 'name,p2pkh,p2sh,wif,segwithrp' (e.g. btc,0,0,0x80,bc)")
 
 	parser.add_option("--info", dest="keyinfo", action="store_true",
 		help="display pubkey, privkey (both depending on the network) and hexkey")
@@ -3430,29 +3434,34 @@ if __name__ == '__main__':
 		print(balance(balance_site, options.key_balance))
 		exit(0)
 
-	if options.namecoin or options.otherversion is not None:
-		if options.namecoin:
-			addrtype = 52
-		else:
-			addrtype = int(options.otherversion)
+	network = network_bitcoin
+	if options.otherversion is not None:
+		try:
+			network = Network('Unknown network', int(options.otherversion), None, None, None)
+			print("Some network info is missing: please use the complete network format")
+		except:
+			network_info = options.otherversion.split(',')
+			parse_int=lambda x:int(x, 16) if x.startswith('0x') else int(x)
+			network = Network(network_info[0], parse_int(network_info[1]), parse_int(network_info[2]), parse_int(network_info[3]), network_info[4])
+	if options.namecoin:
+		network = Network('Namecoin', 52, 13, 180, 'nc')
+	elif options.testnet:
+		db_dir += "/testnet3"
+		network = network_bitcoin_testnet3
 
 	if options.keyinfo is not None or options.random_key:
 		if not options.keyinfo:
 			options.key = os.urandom(32).encode('hex')
 			options.keyishex = True
-		keyinfo(options.key, options.keyishex, addrtype, True, False)
+		keyinfo(options.key, options.keyishex, network, True, False)
 		print("")
-		keyinfo(options.key, options.keyishex, addrtype, True, True)
+		keyinfo(options.key, options.keyishex, network, True, True)
 		exit(0)
 
 	if options.dump is None and options.key is None and options.multidelete is None:
 		print("A mandatory option is missing\n")
 		parser.print_help()
 		exit(0)
-
-	if options.testnet:
-		db_dir += "/testnet3"
-		addrtype = 111
 
 	if not db_dir:
 		print("A wallet path (--wallet) is necessary for this option")

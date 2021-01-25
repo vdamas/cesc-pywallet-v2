@@ -2583,40 +2583,47 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 	return {'crypted':crypted}
 
 
-def parse_private_key(sec, keyishex, force_compressed=None):
+def parse_private_key(sec, force_compressed=None):
 	as_compressed = lambda x:x if force_compressed is None else force_compressed
-	if keyishex is None:
+	try:
 		pkey = regenerate_key(sec)
 		compressed = as_compressed(is_compressed(sec))
-	elif len(sec) == 64:
-		pkey = EC_KEY(str_to_long(sec.decode('hex')))
-		compressed = as_compressed(False)
-	elif len(sec) == 66:
-		pkey = EC_KEY(str_to_long(sec[:-2].decode('hex')))
-		compressed = as_compressed(True)
-	else:
-		print("Hexadecimal private keys must be 64 or 66 characters long (specified one is "+str(len(sec))+" characters long)")
-		if len(sec)<64:
+	except:
+		pkey = None
+		try:
+			sec.decode('hex')
+		except:
+			raise Exception("The private key can't be parsed")
+	if not pkey:
+		if len(sec) == 64:
+			pkey = EC_KEY(str_to_long(sec.decode('hex')))
 			compressed = as_compressed(False)
-			print("Padding with zeroes, %scompressed"%('un' if not compressed else ''))
-			try:
-				pkey = EC_KEY(str_to_long(('0'*(64-len(sec)) + sec).decode('hex')))
-			except Exception as e:
-				print(e)
-				print("Failed padding with zeroes")
-				exit()
-		elif len(sec)>66:
-			compressed = as_compressed(False)
-			print("Keeping first 64 characters, %scompressed"%('un' if not compressed else ''))
-			pkey = EC_KEY(str_to_long(sec[:64].decode('hex')))
+		elif len(sec) == 66:
+			pkey = EC_KEY(str_to_long(sec[:-2].decode('hex')))
+			compressed = as_compressed(True)
 		else:
-			print("Error")
-			exit()
+			print("Hexadecimal private keys must be 64 or 66 characters long (specified one is "+str(len(sec))+" characters long)")
+			if len(sec)<64:
+				compressed = as_compressed(False)
+				print("Padding with zeroes, %scompressed"%('un' if not compressed else ''))
+				try:
+					pkey = EC_KEY(str_to_long(('0'*(64-len(sec)) + sec).decode('hex')))
+				except Exception as e:
+					print(e)
+					print("Failed padding with zeroes")
+					exit()
+			elif len(sec)>66:
+				compressed = as_compressed(False)
+				print("Keeping first 64 characters, %scompressed"%('un' if not compressed else ''))
+				pkey = EC_KEY(str_to_long(sec[:64].decode('hex')))
+			else:
+				print("Error")
+				exit()
 	return (pkey, compressed)
 
-def keyinfo(sec, keyishex, network=None, print_info=False, force_compressed=None):
+def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 	network = network or network_bitcoin
-	(pkey, compressed) = parse_private_key(sec, keyishex, force_compressed)
+	(pkey, compressed) = parse_private_key(sec, force_compressed)
 	if not pkey:
 		return False
 
@@ -2655,8 +2662,8 @@ def keyinfo(sec, keyishex, network=None, print_info=False, force_compressed=None
 
 	return (secret, private_key, public_key, addr)
 
-def importprivkey(db, sec, label, reserve, keyishex, verbose=True):
-	(secret, private_key, public_key, addr) = keyinfo(sec, keyishex, network, verbose)
+def importprivkey(db, sec, label, reserve, verbose=True):
+	(secret, private_key, public_key, addr) = keyinfo(sec, network, verbose)
 
 	global crypter, passphrase, json_db
 	crypted = False
@@ -2747,10 +2754,7 @@ def import_csv_keys(filename, wdir, wname, nbremax=9999999):
 		reserve=False
 		if label=="#Reserve":
 			reserve=True
-		keyishex=None
-		if abs(len(sec)-65)==1:
-			keyishex=True
-		importprivkey(db, sec, label, reserve, keyishex, verbose=False)
+		importprivkey(db, sec, label, reserve, verbose=False)
 
 	global_merging_message = ["Merging done.", ""]
 
@@ -3240,7 +3244,7 @@ if __name__ == '__main__':
 		help="import private key from vanitygen")
 
 	parser.add_option("--importhex", dest="keyishex", action="store_true",
-		help="KEY is in hexadecimal format")
+		help="DEPRECATED, useless")
 
 	parser.add_option("--datadir", dest="datadir",
 		help="REMOVED OPTION: put full path in the --wallet option")
@@ -3452,10 +3456,9 @@ if __name__ == '__main__':
 	if options.keyinfo is not None or options.random_key:
 		if not options.keyinfo:
 			options.key = os.urandom(32).encode('hex')
-			options.keyishex = True
-		keyinfo(options.key, options.keyishex, network, True, False)
+		keyinfo(options.key, network, True, False)
 		print("")
-		keyinfo(options.key, options.keyishex, network, True, True)
+		keyinfo(options.key, network, True, True)
 		exit(0)
 
 	if options.dump is None and options.key is None and options.multidelete is None:
@@ -3495,12 +3498,12 @@ if __name__ == '__main__':
 	elif options.key:
 		if json_db['version'] > max_version:
 			print("Version mismatch (must be <= %d)" % max_version)
-		elif (options.keyishex is None and options.key in private_keys) or (options.keyishex is not None and options.key in private_hex_keys):
+		elif options.key in private_keys or options.key in private_hex_keys:
 			print("Already exists")
 		else:
 			db = open_wallet(db_env, wallet_name, writable=True)
 
-			if importprivkey(db, options.key, options.label, options.reserve, options.keyishex):
+			if importprivkey(db, options.key, options.label, options.reserve):
 				print("Imported successfully")
 			else:
 				print("Bad private key")

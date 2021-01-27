@@ -36,6 +36,7 @@ except:
 	except:
 		 print("Json or simplejson package is needed")
 
+import hmac
 import getpass
 import logging
 import struct
@@ -94,6 +95,8 @@ Tio = 1024 ** 4
 
 prekeys = ["308201130201010420".decode('hex'), "308201120201010420".decode('hex')]
 postkeys = ["a081a530".decode('hex'), "81a530".decode('hex')]
+
+KeyInfo = collections.namedtuple('KeyInfo', 'secret private_key public_key addr wif')
 
 def plural(a):
 	if a>=2:return 's'
@@ -2622,6 +2625,9 @@ def parse_private_key(sec, force_compressed=None):
 	return (pkey, compressed)
 
 def keyinfo(sec, network=None, print_info=False, force_compressed=None):
+	if sec.__class__ == Xpriv:
+		assert sec.ktype == 0
+		return keyinfo(sec.key.encode('hex'), network, print_info, True)
 	network = network or network_bitcoin
 	(pkey, compressed) = parse_private_key(sec, force_compressed)
 	if not pkey:
@@ -2632,6 +2638,7 @@ def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 	public_key = GetPubKey(pkey, compressed)
 	addr = public_key_to_bc_address(public_key, network.p2pkh_prefix)
 	ser_public_key = (b'%02d%.64x'%(4 if not compressed else 2+(pkey.pubkey.point.y()&1), pkey.pubkey.point.x()) + (b'%.64x'%pkey.pubkey.point.y())*int(not compressed)).decode('hex')
+	wif = SecretToASecret(secret, compressed) if network.wif_prefix else None
 
 	if print_info:
 		print("Network: %s"%network.name)
@@ -2649,7 +2656,7 @@ def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 			else:
 				print("P2WPKH unavailable:  unknown network SegWit HRP")
 		if network.wif_prefix != None:
-			print("Privkey:             %s"%(SecretToASecret(secret, compressed)))
+			print("Privkey:             %s"%wif)
 		else:
 			print("Privkey unavailable: unknown network WIF prefix")
 		print("Hexprivkey:          %s"%(secret.encode('hex')))
@@ -2660,10 +2667,14 @@ def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 		if int(secret.encode('hex'), 16)>_r:
 			print('/!\\ Beware, 0x%s is equivalent to 0x%.33x'%(secret.encode('hex'), int(secret.encode('hex'), 16)-_r))
 
-	return (secret, private_key, public_key, addr)
+	return KeyInfo(secret, private_key, public_key, addr, wif)
 
 def importprivkey(db, sec, label, reserve, verbose=True):
-	(secret, private_key, public_key, addr) = keyinfo(sec, network, verbose)
+	k = keyinfo(sec, network, verbose)
+	secret = k.secret
+	private_key = k.private_key
+	public_key = k.public_key
+	addr = k.addr
 
 	global crypter, passphrase, json_db
 	crypted = False
@@ -3228,8 +3239,92 @@ def whitepaper():
 		f.write(content)
 	print("Wrote the Bitcoin whitepaper to %s.pdf"%filename)
 
+class Xpriv(collections.namedtuple('Xpriv', 'version depth prt_fpr childnr cc ktype key')):
+	xpriv_fmt = '>IB4sI32sB32s'
+	def __init__(self, *a, **kw):
+		super(Xpriv, self).__init__(*a, **kw)
+		self.fullpath = 'm'
+	@classmethod
+	def xpriv_version_bytes(cls):return 0x0488ADE4
+	@classmethod
+	def xpub_version_bytes(cls):return 0x0488B21E
+	@classmethod
+	def from_seed(cls, s):
+		I = hmac.new(b'Bitcoin seed', s, digestmod=hashlib.sha512).digest()
+		mk, cc = I[:32], I[32:]
+		return cls(cls.xpriv_version_bytes(), 0, '\x00'*4, 0, cc, 0, mk)
+	def clone(self):
+		return self.__class__.b58decode(self.b58encode())
+	def b58encode(self):
+		return EncodeBase58Check(struct.pack(self.xpriv_fmt, *self._asdict().values()))
+	def xpub(self):
+		pubk = keyinfo(self, None, False, True).public_key
+		xpub_content = self.clone()._replace(version=self.xpub_version_bytes(), ktype=ord(pubk[0]), key=pubk[1:])
+		return EncodeBase58Check(struct.pack(self.xpriv_fmt, *xpub_content))
+	@classmethod
+	def b58decode(cls, b58xpriv):
+		return cls(*struct.unpack(cls.xpriv_fmt, DecodeBase58Check(b58xpriv)))
+	def multi_ckd_xpriv(self, str_path):
+		str_path = str_path.lstrip('m/')
+		path_split = []
+		for j in str_path.split('/'):
+			if not j:continue
+			hardened = 0
+			if j.endswith("'") or j.lower().endswith("h"):
+				hardened = 0x80000000
+				j = j[:-1]
+			try:
+				path_split.append([int(j)+hardened])
+			except:
+				a, b = map(int, j.split('-'))
+				path_split.append(list(range(a+hardened, b+1+hardened)))
+		rev_path_split = path_split[::-1]
+		xprivs = [self]
+		while rev_path_split:
+			children_nrs = rev_path_split.pop()
+			xprivs = [parent.ckd_xpriv(child_nr) for parent in xprivs for child_nr in children_nrs]
+		return xprivs
+	def set_fullpath(self, base, x):
+		self.fullpath = base + '/' + ("%d'"%(x-0x80000000) if x>=0x80000000 else "%d"%x)
+		return self
+	def ckd_xpriv(self, *indexes):
+		if indexes.__class__ != tuple:
+			indexes = [indexes]
+		i = indexes[0]
+		if i<0:
+			i = 0x80000000-i
+		assert self.ktype == 0
+		par_pubk = keyinfo(self, None, False, True).public_key
+		seri = struct.pack('>I',i)
+		if i>=0x80000000:
+			I = hmac.new(self.cc, '\x00'+self.key+seri, digestmod=hashlib.sha512).digest()
+		else:
+			I = hmac.new(self.cc, par_pubk+seri, digestmod=hashlib.sha512).digest()
+		il, ir = I[:32], I[32:]
+		pk = hex((int(il.encode('hex'), 16) + int(self.key.encode('hex'), 16))%_r)[2:].replace('L', '').zfill(64)
+		child = self.__class__(self.version, self.depth+1, hash_160(par_pubk)[:4], i, ir, 0, pk.decode('hex')).set_fullpath(self.fullpath, i)
+		if len(indexes)>=2:
+			return child.ckd_xpriv(*indexes[1:])
+		return child
+	def hprivcontent(self):
+		return DecodeBase58Check(self.b58encode()).encode('hex')
+	def hpubcontent(self):
+		return DecodeBase58Check(self.xpub()).encode('hex')
+
+def dump_bip32_privkeys(xpriv, paths, format):
+	dump_key = lambda x:x.wif
+	if format == 'addr':dump_key = lambda x:x.addr
+	for child in Xpriv.b58decode(xpriv).multi_ckd_xpriv(paths):
+		print('%s: %s'%(child.fullpath, dump_key(keyinfo(child))))
+
 if __name__ == '__main__':
 	parser = OptionParser(usage="%prog [options]", version="%prog 1.1")
+
+	parser.add_option("--dump_bip32", nargs=2,
+		help="dump the keys from a xpriv and a path, usage: --dump_bip32 xprv9s21ZrQH143K m/0H/1-2/2H/2-4")
+
+	parser.add_option("--bip32_format",
+		help="format of dumped bip32 keys")
 
 	parser.add_option("--passphrase", dest="passphrase",
 		help="passphrase for the encrypted wallet")
@@ -3323,6 +3418,11 @@ if __name__ == '__main__':
 #		print('Bitcoin seems to be running: \n"%s"'%(aread))
 #		if options.forcerun is None:
 #			exit(0)
+
+	if options.dump_bip32:
+		print("Warning: single quotes (') may be parsed by your terminal, please use \"H\" for hardened keys")
+		dump_bip32_privkeys(*options.dump_bip32, format=options.bip32_format)
+		exit()
 
 	if options.whitepaper:
 		whitepaper()

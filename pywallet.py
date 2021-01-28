@@ -3330,8 +3330,14 @@ if __name__ == '__main__':
 	parser.add_option("--passphrase", dest="passphrase",
 		help="passphrase for the encrypted wallet")
 
+	parser.add_option("--find_address",
+		help="find info about an address")
+
 	parser.add_option("--dumpwallet", dest="dump", action="store_true",
 		help="dump wallet in json format")
+
+	parser.add_option("--dumpformat", default="all",
+		help="choose what to extract in a wallet dump")
 
 	parser.add_option("--dumpwithbalance", dest="dumpbalance", action="store_true",
 		help="includes balance of each address in the json dump, takes about 2 minutes per 100 addresses")
@@ -3562,11 +3568,6 @@ if __name__ == '__main__':
 		keyinfo(options.key, network, True, True)
 		exit(0)
 
-	if options.dump is None and options.key is None and options.multidelete is None:
-		print("A mandatory option is missing\n")
-		parser.print_help()
-		exit(0)
-
 	if not db_dir:
 		print("A wallet path (--wallet) is necessary for this option")
 		exit()
@@ -3594,8 +3595,18 @@ if __name__ == '__main__':
 		print("Version mismatch (must be <= %d)" % max_version)
 		#exit(1)
 
+	if options.find_address:
+		addr_data = filter(lambda x:x["addr"] == options.find_address, json_db["keys"]+json_db["pool"])
+		print(json.dumps(list(addr_data), sort_keys=True, indent=4))
+		exit()
+
 	if options.dump:
-		print(json.dumps(json_db, sort_keys=True, indent=4))
+		if options.dumpformat == 'addr':
+			addrs = list(map(lambda x:x["addr"], json_db["keys"]+json_db["pool"]))
+			json_db = addrs
+		wallet = json.dumps(json_db, sort_keys=True, indent=4)
+		print(wallet)
+		exit()
 	elif options.key:
 		if json_db['version'] > max_version:
 			print("Version mismatch (must be <= %d)" % max_version)
@@ -3610,7 +3621,11 @@ if __name__ == '__main__':
 				print("Bad private key")
 
 			db.close()
+		exit()
 
+	print("A mandatory option is missing\n")
+	parser.print_help()
+	exit(0)
 
 
 

@@ -3521,14 +3521,14 @@ if __name__ == '__main__':
 		max_version = 10 ** 9
 
 	if options.datadir is not None:
-		print("Breaking change")
-		print("  The --datadir option has been removed, now the full path of the wallet file must go to --wallet")
+		print("Depreacation")
+		print("  The --datadir option has been deprecated, now the full path of the wallet file should go to --wallet")
 		print("  If you're not sure what to do, concatenating the old --datadir content, then a directory separator, then the old --wallet should do the trick")
 		print("  If not, ask for help in the Pywallet thread: https://bitcointalk.org/index.php?topic=34028")
-		exit()
 
 	db_dir = ""
 	if options.walletfile:
+		if options.datadir:options.walletfile=options.datadir+os.path.sep+options.walletfile
 		if not os.path.isfile(options.walletfile):
 			print("ERROR: wallet file %s can't be found"%repr(os.path.realpath(options.walletfile)))
 			exit()

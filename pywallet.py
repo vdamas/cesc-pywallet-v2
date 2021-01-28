@@ -2083,9 +2083,9 @@ def parse_wallet(db, item_callback):
 				d['nTime'] = vds.read_int64()
 				d['otherAccount'] = vds.read_string()
 				d['comment'] = vds.read_string()
-			elif type == "bestblock":
-				d['nVersion'] = vds.read_int32()
-				d.update(parse_BlockLocator(vds))
+			# elif type == "bestblock":
+			# 	d['nVersion'] = vds.read_int32()
+			# 	d.update(parse_BlockLocator(vds))
 			elif type == "ckey":
 				d['public_key'] = kds.read_bytes(kds.read_compact_size())
 				d['encrypted_private_key'] = vds.read_bytes(vds.read_compact_size())
@@ -2334,11 +2334,11 @@ def update_wallet(db, types, datas, paramsAreLists=False):
 				vds.write_int64(d['nTime'])
 				vds.write_string(d['otherAccount'])
 				vds.write_string(d['comment'])
-			elif type == "bestblock":
-				vds.write_int32(d['nVersion'])
-				vds.write_compact_size(len(d['hashes']))
-				for h in d['hashes']:
-					vds.write(h)
+			# elif type == "bestblock":
+			# 	vds.write_int32(d['nVersion'])
+			# 	vds.write_compact_size(len(d['hashes']))
+			# 	for h in d['hashes']:
+			# 		vds.write(h)
 			elif type == "ckey":
 				kds.write_string(d['public_key'])
 				vds.write_string(d['encrypted_private_key'])
@@ -2470,8 +2470,8 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 		elif type == "acentry":
 			json_db['acentry'] = (d['account'], d['nCreditDebit'], d['otherAccount'], time.ctime(d['nTime']), d['n'], d['comment'])
 
-		elif type == "bestblock":
-			json_db['bestblock'] = d['hashes'][0][::-1].encode('hex_codec')
+		# elif type == "bestblock":
+		# 	json_db['bestblock'] = d['hashes'][0][::-1].encode('hex_codec')
 
 		elif type == "ckey":
 			crypted=True
@@ -2496,7 +2496,8 @@ def read_wallet(json_db, db_env, walletfile, print_wallet, print_wallet_transact
 
 		else:
 			json_db[type] = 'unsupported'
-			print("Wallet data not recognized: %d"%d)
+			if type not in 'keymeta'.split():
+				print("Wallet data not recognized: %s"%str(d))
 
 	list_of_reserve_not_in_pool=[]
 	parse_wallet(db, item_callback)

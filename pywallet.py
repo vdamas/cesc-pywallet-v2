@@ -11,7 +11,9 @@ never_update=False
 
 
 import sys
-PY3 = sys.version_info.major >2
+PY3 = sys.version_info.major > 2
+try:raw_input
+except:raw_input = input
 beta_version =  ('a' in pywversion.split('-')[0]) or ('b' in pywversion.split('-')[0])
 
 missing_dep = []
@@ -960,6 +962,22 @@ else:
 # end of pywallet crypter implementation #
 ##########################################
 
+def bytes_to_int(bytes):
+	result = 0
+	for b in bytes:
+		result = result * 256 + ord(b)
+	return result
+
+def int_to_bytes(value, length = None):
+	if not length and value == 0:
+		result = [0]
+	else:
+		result = []
+		for i in range(0, length or 1+int(math.log(value, 2**8))):
+			result.append(value >> (i * 8) & 0xff)
+		result.reverse()
+	return str(bytearray(result))
+
 # secp256k1
 
 _p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
@@ -1000,13 +1018,26 @@ class CurveFp( object ):
 	def contains_point( self, x, y ):
 		return ( y * y - ( x * x * x + self.__a * x + self.__b ) ) % self.__p == 0
 
+	def sqrt_root(self, x):
+		return pow(x, (self.__p + 1) // 4, self.__p)
+
+	def y_from_x(self, x, y_odd):
+		y = self.sqrt_root(( x * x * x + self.__a * x + self.__b ) % self.__p)
+		if (y % 2 == 1) == y_odd:
+			return y
+		else:
+			return self.__p - y
+
 class Point( object ):
-	def __init__( self, curve, x, y, order = None ):
+	def __init__( self, curve, x, y = None, order = None, y_odd = None ):
 		self.__curve = curve
 		self.__x = x
-		self.__y = y
+		if y != None or curve == None:
+			self.__y = y
+		else:
+			self.__y = self.__curve.y_from_x(self.__x, y_odd)
 		self.__order = order
-		if self.__curve: assert self.__curve.contains_point( x, y )
+		if self.__curve: assert self.__curve.contains_point( self.__x, self.__y )
 		if order: assert self * order == INFINITY
 
 	def __add__( self, other ):
@@ -1081,6 +1112,8 @@ class Point( object ):
 		return self.__order
 
 INFINITY = Point( None, None, None )
+secp256k1_curve = CurveFp( _p, _a, _b )
+secp256k1_generator = Point( secp256k1_curve, _Gx, _Gy, _r )
 
 def inverse_mod( a, m ):
 	if a < 0 or m <= a: a = a % m
@@ -1136,6 +1169,14 @@ class Public_key( object ):
 
 	def get_addr(self, v=0):
 		return public_key_to_bc_address(self.ser(), v)
+
+	@classmethod
+	def from_ser(cls, g, ser):
+		if len(ser) == 33:
+			return cls(g, Point(g.curve(), bytes_to_int(ser[1:]), y_odd = ord(ser[0]) == 3), ord(ser[0]) < 4)
+		elif len(ser) == 65:
+			return cls(g, Point(g.curve(), bytes_to_int(ser[1:33]), bytes_to_int(ser[33:])), ord(ser[0]) < 4)
+		raise Exception("Bad public key format: %s"%repr(ser))
 
 class Private_key( object ):
 	def __init__( self, public_key, secret_multiplier ):
@@ -2748,6 +2789,13 @@ def parse_private_key(sec, force_compressed=None):
 				exit()
 	return (pkey, compressed)
 
+def pubkey_info(pubkey, network):
+	addr = public_key_to_bc_address(pubkey, network.p2pkh_prefix)
+	p2wpkh = p2sh_script_to_addr(b'\x00\x14'+hash_160(pubkey))
+	witaddr = witprog_to_bech32_addr(hash_160(pubkey), network)
+	h160 = bc_address_to_hash_160(addr)
+	return addr, p2wpkh, witaddr, h160
+
 def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 	if sec.__class__ == Xpriv:
 		assert sec.ktype == 0
@@ -2759,9 +2807,8 @@ def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 
 	secret = GetSecret(pkey)
 	private_key = GetPrivKey(pkey, compressed)
-	public_key = GetPubKey(pkey, compressed)
-	addr = public_key_to_bc_address(public_key, network.p2pkh_prefix)
-	ser_public_key = (b'%02d%.64x'%(4 if not compressed else 2+(pkey.pubkey.point.y()&1), pkey.pubkey.point.x()) + (b'%.64x'%pkey.pubkey.point.y())*int(not compressed)).decode('hex')
+	ser_public_key = GetPubKey(pkey, compressed)
+	addr, p2wpkh, witaddr, h160 = pubkey_info(ser_public_key, network)
 	wif = SecretToASecret(secret, compressed) if network.wif_prefix else None
 
 	if print_info:
@@ -2771,12 +2818,12 @@ def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 			print("P2PKH Address:       %s"%(addr))
 		if compressed:
 			if network.p2sh_prefix != None:
-				print("P2SH-P2WPKH Address: %s"%(p2sh_script_to_addr(b'\x00\x14'+hash_160(ser_public_key))))
+				print("P2SH-P2WPKH Address: %s"%(p2wpkh))
 			else:
 				print("P2SH unavailable:    unknown network P2SH prefix")
 		if compressed:
 			if network.segwit_hrp != None:
-				print("P2WPKH Address:      %s"%(witprog_to_bech32_addr(hash_160(ser_public_key), network)))
+				print("P2WPKH Address:      %s"%(witaddr))
 			else:
 				print("P2WPKH unavailable:  unknown network SegWit HRP")
 		if network.wif_prefix != None:
@@ -2786,7 +2833,7 @@ def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 		print("Hexprivkey:          %s"%(secret.encode('hex')))
 		if compressed:
 			print("    For compressed keys, the hexadecimal private key sometimes contains an extra '01' at the end")
-		print("Hash160:             %s"%(bc_address_to_hash_160(addr).encode('hex')))
+		print("Hash160:             %s"%(h160.encode('hex')))
 		print("Pubkey:              %s"%ser_public_key.encode('hex'))
 		if int(secret.encode('hex'), 16)>_r:
 			print('/!\\ Beware, 0x%s is equivalent to 0x%.33x'%(secret.encode('hex'), int(secret.encode('hex'), 16)-_r))
@@ -3535,6 +3582,9 @@ if __name__ == '__main__':
 	parser.add_option("--whitepaper", action="store_true",
 		help="write the Bitcoin whitepaper using bitcoin-cli or blockchain.info")
 
+	parser.add_option("--minimal_encrypted_copy", action="store_true",
+		help="write a copy of an encrypted wallet with only an empty address, *should* be safe to share when needing help bruteforcing the password")
+
 
 #	parser.add_option("--forcerun", dest="forcerun",
 #		action="store_true",
@@ -3720,6 +3770,53 @@ if __name__ == '__main__':
 			exit(1)
 		exit(0)
 
+	if options.minimal_encrypted_copy:
+		db = open_wallet(db_env, wallet_name)
+		minimal_wallet = wallet_name + '.minimal_for_decrypting.dat'
+		assert not os.path.exists(os.path.join(db_dir, minimal_wallet)), "There is already a minimal encrypted copy at %s/%s, exiting"%(db_dir, minimal_wallet)
+		kds = BCDataStream()
+		vds = BCDataStream()
+		encrypted_keys = []
+		mkey = None
+		for (key, value) in db.items():
+			d = {}
+			kds.clear(); kds.write(key)
+			vds.clear(); vds.write(value)
+			typ = kds.read_string()
+			if typ == 'mkey':
+				mkey = (key, value)
+			if typ != 'ckey':continue
+			d['public_key'] = kds.read_bytes(kds.read_compact_size())
+			d['__key__'] = key
+			d['__value__'] = value
+			encrypted_keys.append(d)
+		db.close()
+		print('''
+	Before creating a safe partial wallet you need to check the balance of the following addresses.
+	You may check the balance on your wallet or using an online block explorer.
+	Just hit Enter if the address is empty and write 'no' if not empty.
+
+			''')
+		for pbk in encrypted_keys[::-1]:
+			p2pkh, p2wpkh, witaddr, _ = pubkey_info(pbk['public_key'], network)
+			for addr in [p2pkh, p2wpkh, witaddr]:
+				has_balance = raw_input(addr + ': ') != ''
+				if has_balance:
+					print('')
+					break
+			if not has_balance:
+				if raw_input("\nAre you REALLY sure the 3 addresses above have an empty balance? (type 'YES') ") == 'YES':
+					output_db = open_wallet(db_env, minimal_wallet, True)
+					output_db.put(*mkey)
+					output_db.put(pbk['__key__'], pbk['__value__'])
+					output_db.close()
+					print('\nMinimal wallet written at %s'%minimal_wallet)
+					exit()
+				else:
+					print('\nYou need to input zero character only when the balance is empty, exiting')
+					exit()
+		print("\nError: all your addresses seem to be used, pywallet can't create a safe minimal wallet to share")
+		exit()
 
 	read_wallet(json_db, db_env, wallet_name, True, True, "", options.dumpbalance is not None)
 
@@ -3755,9 +3852,6 @@ if __name__ == '__main__':
 			db.close()
 		exit()
 
-	print("A mandatory option is missing\n")
-	parser.print_help()
-	exit(0)
 
 
 

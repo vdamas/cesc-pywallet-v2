@@ -832,14 +832,6 @@ class AESModeOfOperation(object):
 # pywallet crypter implementation #
 ###################################
 
-crypter = None
-
-try:
-	from Crypto.Cipher import AES
-	crypter = 'pycrypto'
-except:
-	pass
-
 class Crypter_pycrypto( object ):
 	def SetKeyFromPassphrase(self, vKeyData, vSalt, nDerivIterations, nDerivationMethod):
 		if nDerivationMethod != 0:
@@ -862,15 +854,6 @@ class Crypter_pycrypto( object ):
 
 	def Decrypt(self, data):
 		return AES.new(self.chKey,AES.MODE_CBC,self.chIV).decrypt(data)[0:32]
-
-try:
-	if not crypter:
-		import ctypes
-		import ctypes.util
-		ssl = ctypes.cdll.LoadLibrary (ctypes.util.find_library ('ssl') or 'libeay32')
-		crypter = 'ssl'
-except:
-	pass
 
 class Crypter_ssl(object):
 	def __init__(self):
@@ -947,16 +930,21 @@ class Crypter_pure(object):
 		chData = [ord(i) for i in data]
 		return self.m.decrypt(chData, self.sz, self.cbc, self.chKey, self.sz, self.chIV)
 
-if crypter == 'pycrypto':
-	crypter = Crypter_pycrypto()
-#	print("Crypter: pycrypto")
-elif crypter == 'ssl':
-	crypter = Crypter_ssl()
-#	print("Crypter: ssl")
-else:
-	crypter = Crypter_pure()
-#	print("Crypter: pure")
-	logging.warning("pycrypto or libssl not found, decryption may be slow")
+crypter = None
+if crypter is None:
+	try:
+		from Crypto.Cipher import AES
+		crypter = Crypter_pycrypto()
+	except:
+		try:
+			import ctypes
+			import ctypes.util
+			ssl = ctypes.cdll.LoadLibrary (ctypes.util.find_library ('ssl') or 'libeay32')
+			crypter = Crypter_ssl()
+		except:
+			crypter = Crypter_pure()
+			logging.warning("pycrypto or libssl not found, decryption may be slow")
+
 
 ##########################################
 # end of pywallet crypter implementation #

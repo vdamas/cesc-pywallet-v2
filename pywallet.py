@@ -3474,8 +3474,8 @@ class Xpriv(collections.namedtuple('XprivNT', 'version depth prt_fpr childnr cc 
 	@classmethod
 	def xpub_version_bytes(cls):return 0x0488B21E
 	@classmethod
-	def from_seed(cls, s):
-		I = hmac.new(b'Bitcoin seed', s, digestmod=hashlib.sha512).digest()
+	def from_seed(cls, s, seed = b'Bitcoin seed'):
+		I = hmac.new(seed, s, digestmod=hashlib.sha512).digest()
 		mk, cc = I[:32], I[32:]
 		return cls(cls.xpriv_version_bytes(), 0, '\x00'*4, 0, cc, 0, mk)
 	def clone(self):
@@ -3536,10 +3536,13 @@ class Xpriv(collections.namedtuple('XprivNT', 'version depth prt_fpr childnr cc 
 	def hpubcontent(self):
 		return binascii.hexlify(DecodeBase58Check(self.xpub()))
 
-def dump_bip32_privkeys(xpriv, paths, format):
+def dump_bip32_privkeys(xpriv, paths='m/0', fmt='addr'):
 	dump_key = lambda x:x.wif
-	if format == 'addr':dump_key = lambda x:x.addr
-	for child in Xpriv.b58decode(xpriv).multi_ckd_xpriv(paths):
+	if fmt == 'addr':dump_key = lambda x:x.addr
+	try:
+		xpriv = Xpriv.b58decode(xpriv)
+	except:pass
+	for child in xpriv.multi_ckd_xpriv(paths):
 		print('%s: %s'%(child.fullpath, dump_key(keyinfo(child))))
 
 class TestPywallet(unittest.TestCase):

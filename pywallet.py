@@ -21,10 +21,12 @@ warnings.formatwarning = warning_on_one_line
 if PY3:
 	warnings.warn("Python 3 support is still experimental, you may encounter bugs")
 	import _thread as thread
+	import functools
 	raw_input = input
 	xrange = range
 	long = int
 	unicode = str
+	reduce = functools.reduce
 else:
 	import thread
 
@@ -96,8 +98,9 @@ class Bdict(dict):
 	def __init__(self, *a, **kw):
 		super(Bdict, self).__init__(*a, **kw)
 		for k, v in self.copy().items():
+			try:del self[k]
+			except:pass
 			self[bytes_to_str(k)] = v
-			del self[k]
 	def update(self, *a, **kw):
 		other = self.__class__(*a, **kw)
 		return super(Bdict, self).update(other)
@@ -120,6 +123,7 @@ private_keys = []
 private_hex_keys = []
 passphrase = ""
 global_merging_message = ["",""]
+CNT = collections.namedtuple
 
 balance_site = 'https://blockchain.info/q/addressbalance/'
 backup_balance_site ='https://api.blockcypher.com/v1/btc/main/addrs/'
@@ -137,14 +141,16 @@ class Network(collections.namedtuple('Network', 'name p2pkh_prefix p2sh_prefix w
 	def __init__(self, *a, **kw):
 		self.__class__.instances.append(self)
 		super(Network, self).__init__()
-	def keyinfo(self, *a):
+	def keyinfo(self, *a, **kw):
 		pass
-def ethereum_keyinfo(self, keyinfo):
-	if keyinfo.compressed:return
-	ethpubkey = keyinfo.public_key[1:]
-	eth_addr = binascii.hexlify(Keccak256(ethpubkey).digest()[-20:])
-	print("Ethereum address:    %s"%eth_addr)
-	print("Ethereum B58address: %s"%public_key_to_bc_address(eth_addr, 33))
+def ethereum_keyinfo(self, keyinfo, print_info=True):
+	ethpubkey = keyinfo.uncompressed_public_key[1:]
+	eth_hash = binascii.hexlify(Keccak256(ethpubkey).digest())[-40:]
+	eth_addr = '0x' + bytes_to_str(eth_hash)
+	if print_info and not keyinfo.compressed:
+		print("Ethereum address:    %s"%eth_addr)
+		print("Ethereum B58address: %s"%public_key_to_bc_address(eth_hash, 33))
+	return CNT('SubKeyInfo', 'addr')(eth_addr)
 
 network_bitcoin = Network('Bitcoin', 0, 5, 0x80, 'bc')
 network_bitcoin_testnet3 = Network('Bitcoin-Testnet3', 0x6f, 0xc4, 0xef, 'tb')
@@ -167,7 +173,7 @@ Tio = 1024 ** 4
 prekeys = [binascii.unhexlify("308201130201010420"), binascii.unhexlify("308201120201010420")]
 postkeys = [binascii.unhexlify("a081a530"), binascii.unhexlify("81a530")]
 
-KeyInfo = collections.namedtuple('KeyInfo', 'secret private_key public_key addr wif compressed')
+KeyInfo = collections.namedtuple('KeyInfo', 'secret private_key public_key uncompressed_public_key addr wif compressed')
 
 def plural(a):
 	if a>=2:return 's'
@@ -249,7 +255,7 @@ class KeccakState:
 		for b in reversed(bb):r=r<<8|b
 		return r
 	@staticmethod
-	def bytes2str(bb):return ''.join(map(chrsix,bb))
+	def bytes2str(bb):return str_to_bytes('').join(map(chrsix,bb))
 	@staticmethod
 	def str2bytes(ss):return map(ordsix,ss)
 	def __init__(self,bitrate,b):self.bitrate=bitrate;self.b=b;assert self.bitrate%8==0;self.bitrate_bytes=bits2bytes(self.bitrate);assert self.b%25==0;self.lanew=self.b//25;self.s=KeccakState.zero()
@@ -1798,7 +1804,7 @@ def recov(device, passes, size=102400, inc=10240, outputdir='.'):
 		if calcspeed==0:
 			calcspeed=1.0
 
-		ckeys_not_decrypted=filter(lambda x:x[1].privkey==None, ckeys)
+		ckeys_not_decrypted=list(filter(lambda x:x[1].privkey==None, ckeys))
 		refused_to_test_all_pps=True
 		if len(ckeys_not_decrypted)==0:
 			print("All the found encrypted private keys have been decrypted.")
@@ -2853,7 +2859,7 @@ def pubkey_info(pubkey, network):
 def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 	if sec.__class__ == Xpriv:
 		assert sec.ktype == 0
-		return keyinfo(binascii.hexlify(sec.key), network, print_info, True)
+		return keyinfo(binascii.hexlify(sec.key), network, print_info, force_compressed)
 	network = network or network_bitcoin
 	(pkey, compressed) = parse_private_key(sec, force_compressed)
 	if not pkey:
@@ -2861,6 +2867,7 @@ def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 
 	secret = GetSecret(pkey)
 	private_key = GetPrivKey(pkey, compressed)
+	uncompressed_ser_public_key = GetPubKey(pkey, False)
 	ser_public_key = GetPubKey(pkey, compressed)
 	addr, p2wpkh, witaddr, h160 = pubkey_info(ser_public_key, network)
 	wif = SecretToASecret(secret, compressed) if network.wif_prefix else None
@@ -2892,8 +2899,12 @@ def keyinfo(sec, network=None, print_info=False, force_compressed=None):
 		if int(binascii.hexlify(secret), 16)>_r:
 			warnings.warn('/!\\ Beware, 0x%s is equivalent to 0x%.33x'%(binascii.hexlify(secret), int(binascii.hexlify(secret), 16)-_r))
 
-	r = KeyInfo(secret, private_key, ser_public_key, addr, wif, compressed)
-	network and network.keyinfo(r)
+	r = KeyInfo(secret, private_key, ser_public_key, uncompressed_ser_public_key, addr, wif, compressed)
+	if network:
+		ki = network.keyinfo(r, print_info=print_info)
+		if ki:
+			addr = ki.addr
+		r = KeyInfo(secret, private_key, ser_public_key, uncompressed_ser_public_key, addr, wif, compressed)
 	return r
 
 def importprivkey(db, sec, label, reserve, verbose=True):
@@ -3484,12 +3495,16 @@ class Xpriv(collections.namedtuple('XprivNT', 'version depth prt_fpr childnr cc 
 	def from_seed(cls, s, seed = b'Bitcoin seed'):
 		I = hmac.new(seed, s, digestmod=hashlib.sha512).digest()
 		mk, cc = I[:32], I[32:]
-		return cls(cls.xpriv_version_bytes(), 0, '\x00'*4, 0, cc, 0, mk)
+		return cls(cls.xpriv_version_bytes(), 0, b'\x00'*4, 0, cc, 0, mk)
 	def clone(self):
 		return self.__class__.b58decode(self.b58encode())
 	def b58encode(self):
 		return EncodeBase58Check(struct.pack(self.xpriv_fmt, *self._asdict().values()))
-	def xpub(self):
+	def address(self, **kw):
+		return keyinfo(self, kw.get('network'), False, True).addr
+	def key_hex(self):
+		return binascii.hexlify(self.key)
+	def xpub(self, **kw):
 		pubk = keyinfo(self, None, False, True).public_key
 		xpub_content = self.clone()._replace(version=self.xpub_version_bytes(), ktype=ordsix(pubk[0]), key=pubk[1:])
 		return EncodeBase58Check(struct.pack(self.xpriv_fmt, *xpub_content))
@@ -3543,27 +3558,35 @@ class Xpriv(collections.namedtuple('XprivNT', 'version depth prt_fpr childnr cc 
 	def hpubcontent(self):
 		return binascii.hexlify(DecodeBase58Check(self.xpub()))
 
-def dump_bip32_privkeys(xpriv, paths='m/0', fmt='addr'):
-	dump_key = lambda x:x.wif
-	if fmt == 'addr':dump_key = lambda x:x.addr
+def dump_bip32_privkeys(xpriv, paths='m/0', fmt='addr', **kw):
+	if fmt == 'addr':
+		dump_key = lambda x:x.addr
+	elif fmt == 'privkey':
+		dump_key = lambda x:bytes_to_str(binascii.hexlify(x.secret))
+	elif fmt == 'addrprivkey':
+		dump_key = lambda x:x.addr+' '+bytes_to_str(binascii.hexlify(x.secret))
+	elif fmt == 'addrwif':
+		dump_key = lambda x:x.addr+' '+x.wif
+	else:
+		dump_key = lambda x:x.wif
 	try:
 		xpriv = Xpriv.b58decode(xpriv)
 	except:pass
 	for child in xpriv.multi_ckd_xpriv(paths):
-		print('%s: %s'%(child.fullpath, dump_key(keyinfo(child))))
+		print('%s: %s'%(child.fullpath, dump_key(keyinfo(child, kw.get('network'), False, True))))
 
 class TestPywallet(unittest.TestCase):
 	def setUp(self):
 		super(TestPywallet, self).setUp()
 		warnings.simplefilter('ignore')
 	def test_btc_privkey_1(self):
-		key = keyinfo('1', network=network_bitcoin)
+		key = keyinfo('1', network=network_bitcoin, force_compressed=True)
 		self.assertEqual(key.addr, '1EHNa6Q4Jz2uvNExL497mE43ikXhwF6kZm')
 		self.assertEqual(key.wif, '5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf')
 		self.assertEqual(key.secret, b'\x00'*31+b'\x01')
 		self.assertFalse(key.compressed)
 	def test_btc_privkey_1_from_wif(self):
-		key = keyinfo('5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf', network=network_bitcoin)
+		key = keyinfo('5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf', network=network_bitcoin, force_compressed=True)
 		self.assertEqual(key.addr, '1EHNa6Q4Jz2uvNExL497mE43ikXhwF6kZm')
 	def test_bad_privkey_format(self):
 		with self.assertRaises(Exception):
@@ -3645,6 +3668,9 @@ if __name__ == '__main__':
 
 	parser.add_option("--namecoin", dest="namecoin", action="store_true",
 		help="use namecoin address type")
+
+	parser.add_option("--eth", dest="ethereum", action="store_true",
+		help="use ethereum address type")
 
 	parser.add_option("--otherversion", dest="otherversion",
 		help="use other network address type, either P2PKH prefix only (e.g. 111) or full network info as 'name,p2pkh,p2sh,wif,segwithrp' (e.g. btc,0,0,0x80,bc)")
@@ -3807,7 +3833,7 @@ if __name__ == '__main__':
 		exit(0)
 
 	if 'ecdsa' in missing_dep:
-		print("'ecdsa' package is not installed, pywallet won't be able to sign/verify messages")
+		print("Warning: 'ecdsa' package is not installed, so you won't be able to sign/verify messages but everything else will work fine")
 
 	if not(options.dcv is None):
 		max_version = 10 ** 9
@@ -3850,6 +3876,8 @@ if __name__ == '__main__':
 	elif options.testnet:
 		db_dir += "/testnet3"
 		network = network_bitcoin_testnet3
+	elif options.ethereum:
+		network = network_ethereum
 
 	if not(options.keyinfo is None) or options.random_key:
 		if not options.keyinfo:

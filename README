@@ -14,7 +14,9 @@ Options:
   --wallet=WALLETFILE   wallet filename (defaults to wallet.dat)
   --label=LABEL         label shown in the adress book (defaults to '')
   --testnet             use testnet subdirectory and address type
+  
   --namecoin            use namecoin address type
+  --cryptoescudo        use cryptoescudo address type
   --otherversion=OTHERVERSION
                         use other network address type, whose version is
                         OTHERVERSION
@@ -40,3 +42,7 @@ Mac OS X:
 
 Windows: 
  Just install Python 2.7
+ 
+ How to use with a Cryptoescudo wallet:
+  python pywallet.py --wallet=[wallet file fullpath] --dumpwallet --cryptoescudo
+  If wallet has passphrase add --passphrase [passphrase]
